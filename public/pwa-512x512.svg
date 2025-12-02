@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#4f46e5" rx="100" />
+  <path fill="#ffffff" d="M128 200h40v112h-40zM344 200h40v112h-40z" />
+  <path fill="#ffffff" d="M168 236h176v40H168z" />
+  <circle cx="128" cy="256" r="32" fill="#ffffff" />
+  <circle cx="384" cy="256" r="32" fill="#ffffff" />
+  <text x="50%" y="420" font-family="Arial, sans-serif" font-size="64" fill="white" text-anchor="middle" font-weight="bold">GymFlow</text>
+</svg>
