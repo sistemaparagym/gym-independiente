@@ -69,20 +69,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       if (!firebaseUser.email) throw new Error('No se pudo obtener el email del usuario.');
 
-      // --- ACCESO DE EMERGENCIA / SUPER ADMIN ---
-      // Si el email es el tuyo, forzamos la entrada como Admin sin consultar la base de datos
-      if (firebaseUser.email.toLowerCase() === 'edur900@gmail.com') {
-         console.log("Acceso de Super Admin forzado detectado.");
-         onLogin('admin', {
-             id: 'super-admin-temp',
-             name: 'Super Admin',
-             email: firebaseUser.email,
-             role: 'admin'
-         });
-         return; // Detenemos la ejecución aquí para que entre inmediatamente
-      }
-      // -----------------------------------------
-
       // 2. AUTORIZACIÓN: Buscar el rol del usuario en la base de datos (Firestore)
       
       // A) Buscar en colección STAFF
@@ -229,7 +215,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
       </div>
       
-      <p className="text-slate-500 text-xs mt-8">Versión 2.2 - Acceso Seguro + Admin</p>
+      <p className="text-slate-500 text-xs mt-8">Versión 2.3 - Producción</p>
     </div>
   );
 };
