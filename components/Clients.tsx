@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Client, MembershipStatus, Routine } from '../types';
+import { Client, MembershipStatus, Routine, GymSettings } from '../types';
 import { Search, Plus, MoreHorizontal, User, Mail, Phone, Edit, Trash2, DollarSign, X, Key, Dumbbell, CheckCircle, Repeat, AlertCircle, Calendar } from 'lucide-react';
 
 interface ClientsProps {
@@ -9,9 +9,10 @@ interface ClientsProps {
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => void;
   registerPayment: (client: Client, amount: number, description: string) => void;
+  settings: GymSettings; // Added settings prop here to fix the type error
 }
 
-export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, updateClient, deleteClient, registerPayment }) => {
+export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, updateClient, deleteClient, registerPayment, settings }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -38,6 +39,13 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
   const [selectedNewRoutineId, setSelectedNewRoutineId] = useState('');
 
   const filteredClients = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // Helper para obtener precio
+  const getPriceForPlan = (plan: string | undefined) => {
+      const p = plan || 'basic';
+      const prices: any = settings.membershipPrices || { basic: 0, intermediate: 0, full: 0, crossfit: 0 };
+      return prices[p] || 0;
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +112,8 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
       setIsRoutineModalOpen(true);
       setActiveMenuId(null);
   }
+
+  const planPrice = getPriceForPlan(formData.plan);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 min-h-screen" onClick={() => setActiveMenuId(null)}>
@@ -221,6 +231,11 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                           {/* EDITADO: Nueva opción CrossFit */}
                           <option value="crossfit">Cuota CrossFit / Pase Libre</option>
                         </select>
+                        {/* VISUALIZADOR DE PRECIO */}
+                        <p className="text-xs mt-1 font-bold text-slate-500">
+                            Precio Actual: <span className={planPrice === 0 ? "text-red-500" : "text-emerald-600"}>${planPrice}</span>
+                            {planPrice === 0 && " (¡Atención! Configura el precio en Ajustes)"}
+                        </p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de Ingreso (Inicio Ciclo) *</label>
@@ -230,12 +245,13 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                       
                       {!isEditModalOpen && (
                         <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Saldo Inicial / Pago Adelantado</label>
+                            {/* ETIQUETA CAMBIADA PARA CLARIDAD */}
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Monto Abonado Hoy (Pago Inicial)</label>
                             <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                                <input type="number" className="w-full pl-9 p-2 border border-slate-300 rounded-lg" placeholder="0.00" value={formData.balance} onChange={e => setFormData({...formData, balance: parseFloat(e.target.value)})} />
+                                <input type="number" className="w-full pl-9 p-2 border border-slate-300 rounded-lg" placeholder="0.00" value={formData.balance === 0 ? '' : formData.balance} onChange={e => setFormData({...formData, balance: parseFloat(e.target.value) || 0})} />
                             </div>
-                            <p className="text-xs text-slate-500 mt-1">Si el cliente paga la inscripción ahora, ingrésalo aquí. Se descontará el valor de la cuota automáticamente.</p>
+                            <p className="text-xs text-slate-500 mt-1">Ingresa aquí SOLO lo que el cliente paga en este momento. Si no paga nada, déjalo en 0 para generar la deuda.</p>
                         </div>
                       )}
                   </div>
