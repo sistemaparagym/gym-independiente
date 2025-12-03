@@ -17,7 +17,7 @@ import { Login } from './components/Login';
 import { BookingsManager } from './components/BookingsManager';
 import { WODBuilder } from './components/WODBuilder';
 import { Whiteboard } from './components/Whiteboard';
-import { NotificationsConfig } from './components/NotificationsConfig'; // <--- NUEVO IMPORT
+import { NotificationsConfig } from './components/NotificationsConfig'; 
 
 // Tipos
 import { Client, Transaction, Product, CheckIn, GymSettings, MembershipStatus, TransactionType, Routine, UserRole, Staff, CompletedRoutine, ClassSession, WOD, WODScore } from './types';
@@ -114,24 +114,30 @@ function App() {
     return `${currentUser.name} (${roleLabel})`;
   };
 
-  // --- PROCESO DE COBRO AUTOMÁTICO ---
+  // --- PROCESO DE COBRO AUTOMÁTICO (CORREGIDO) ---
   useEffect(() => {
     if (clients.length === 0) return;
 
     const checkMemberships = async () => {
-      const today = new Date();
-      today.setHours(0,0,0,0);
+      // Usamos fecha local exacta para evitar problemas de zona horaria
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
       clients.forEach(async (client) => {
         if (client.status !== MembershipStatus.ACTIVE) return;
 
         const lastPaymentStr = client.lastMembershipPayment || client.joinDate;
-        const lastPaymentDate = new Date(lastPaymentStr);
-        lastPaymentDate.setHours(0,0,0,0);
+        
+        // CORRECCIÓN: Parseo manual de la fecha "YYYY-MM-DD" para asegurar fecha local
+        // new Date("2023-11-03") crea fecha UTC, lo que puede ser día 2 en Latam.
+        // Esto lo soluciona:
+        const [y, m, d] = lastPaymentStr.split('-').map(Number);
+        const lastPaymentDate = new Date(y, m - 1, d); // Mes es index 0 en JS
         
         const nextPaymentDate = new Date(lastPaymentDate);
         nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
 
+        // Si hoy es igual o mayor a la fecha de próximo pago
         if (today >= nextPaymentDate) {
           const amount = getPlanPrice(client.plan);
 
@@ -151,10 +157,14 @@ function App() {
             };
             await setDoc(doc(db, 'transactions', newTransaction.id), newTransaction);
 
+            // IMPORTANTE: nextPaymentDate DEBE guardarse como la nueva fecha de último pago
+            // para que no vuelva a cobrar mañana.
+            const newLastPaymentStr = nextPaymentDate.toISOString().split('T')[0];
+
             const newBalance = client.balance - amount;
             await updateDoc(doc(db, 'clients', client.id), {
               balance: newBalance,
-              lastMembershipPayment: nextPaymentDate.toISOString().split('T')[0]
+              lastMembershipPayment: newLastPaymentStr
             });
           }
         }
@@ -163,7 +173,7 @@ function App() {
 
     const timer = setInterval(() => {
       checkMemberships();
-    }, 10000); 
+    }, 10000); // Revisa cada 10 segundos
 
     return () => clearInterval(timer);
   }, [clients, gymSettings.membershipPrices]); 
@@ -171,17 +181,25 @@ function App() {
 
   // --- Funciones de Acción ---
   const addClient = async (c: Client) => {
-    const price = getPlanPrice(c.plan);
-    const finalBalance = c.balance - price;
+    // CORRECCIÓN: Lógica para calcular la deuda inicial si corresponde
+    const planPrice = getPlanPrice(c.plan);
+    const amountPaid = c.balance || 0; // Lo que el usuario pagó HOY al inscribirse
+    
+    // El balance inicial es (Lo que pagó) - (Costo del Plan)
+    // Si pagó 0 y el plan sale 5000 -> Balance -5000 (Deuda)
+    const finalBalance = amountPaid - planPrice; 
+    
     const clientWithPayment = { ...c, balance: finalBalance, lastMembershipPayment: c.joinDate };
     await setDoc(doc(db, 'clients', c.id), clientWithPayment);
-    if (price > 0) {
+    
+    // Solo registramos transacción si hubo un pago real de dinero
+    if (amountPaid > 0) {
         await setDoc(doc(db, 'transactions', crypto.randomUUID()), { 
             id: crypto.randomUUID(), 
             clientId: c.id, 
             clientName: c.name,
             description: `Pago Inicial - Alta`, 
-            amount: price, 
+            amount: amountPaid, 
             date: new Date().toISOString().split('T')[0],
             type: TransactionType.INCOME, 
             category: 'Cuota',
@@ -366,8 +384,9 @@ function App() {
         <header className="bg-white border-b border-slate-200 lg:hidden p-4 flex items-center justify-between sticky top-0 z-30"><div className="flex items-center gap-3"><button onClick={() => setIsSidebarOpen(true)} className="text-slate-600"><Menu size={24} /></button><span className="font-bold text-lg text-slate-800">{gymSettings.name}</span></div></header>
         <div className="flex-1 overflow-auto bg-slate-50/50">
           <div className="max-w-7xl mx-auto">
+             {/* PASAMOS SETTINGS A CLIENTS */}
              {currentView === 'dashboard' && <Dashboard transactions={transactions} clients={clients} checkIns={checkIns} settings={gymSettings} userRole={userRole} />}
-             {currentView === 'clients' && <Clients clients={clients} routines={routines} addClient={addClient} updateClient={updateClient} deleteClient={deleteClient} registerPayment={registerPayment} />}
+             {currentView === 'clients' && <Clients clients={clients} routines={routines} addClient={addClient} updateClient={updateClient} deleteClient={deleteClient} registerPayment={registerPayment} settings={gymSettings} />}
              {currentView === 'accounting' && <Accounting transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} clients={clients} />}
              {currentView === 'inventory' && <Inventory products={products} addProduct={addProduct} />}
              {currentView === 'access' && <AccessControl checkIns={checkIns} clients={clients} onCheckIn={handleCheckIn} onCheckOut={handleCheckOut} />}
