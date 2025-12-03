@@ -1,9 +1,8 @@
-// components/Login.tsx
 import React, { useState, useEffect } from 'react';
 import { Dumbbell, Lock, Mail, ArrowRight, Loader2, Download, Smartphone, Share, PlusSquare } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { signInWithEmailAndPassword } from 'firebase/auth'; // <--- NUEVO IMPORT
-import { db, auth } from '../firebase'; // <--- IMPORTAR AUTH
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { UserRole, Client, Staff } from '../types';
 
 interface LoginProps {
@@ -16,32 +15,44 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Estados para PWA (Instalación) - Se mantienen igual
+  // Estados para PWA (Instalación)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   useEffect(() => {
-    // Lógica PWA original se mantiene intacta...
+    // 1. Chequear si ya está instalada (Modo Standalone)
     const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
     setIsStandalone(isStandaloneMode);
+
+    // 2. Detectar si es dispositivo iOS (iPhone/iPad)
     const userAgent = window.navigator.userAgent.toLowerCase();
-    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    setIsIOS(isIosDevice);
+
+    // 3. Capturar evento de instalación (Android/PC Chrome)
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+      e.preventDefault(); // Evita que Chrome muestre el banner nativo feo
+      setDeferredPrompt(e); // Guardamos el evento para dispararlo con nuestro botón
     };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   const handleInstallClick = async () => {
+    // Lógica para Android / Desktop
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') setDeferredPrompt(null);
-    } else if (isIOS) {
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } 
+    // Lógica para iOS (Mostrar instrucciones)
+    else if (isIOS) {
       setShowIOSInstructions(true);
     }
   };
@@ -52,42 +63,41 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      // 1. AUTENTICACIÓN CON FIREBASE AUTH
-      // Esto verifica si el email y contraseña son válidos en la consola de Firebase
+      // 1. AUTENTICACIÓN: Validar credenciales con Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
 
-      if (!firebaseUser.email) throw new Error('No se pudo verificar el email.');
+      if (!firebaseUser.email) throw new Error('No se pudo obtener el email del usuario.');
 
-      // 2. AUTORIZACIÓN (Buscar perfil en Firestore)
-      // Una vez autenticado, buscamos si es Staff o Cliente para obtener su rol y datos.
-
-      // A) Buscar en STAFF
+      // 2. AUTORIZACIÓN: Buscar el rol del usuario en la base de datos (Firestore)
+      
+      // A) Buscar en colección STAFF
       const staffQuery = query(collection(db, 'staff'), where('email', '==', firebaseUser.email));
       const staffSnapshot = await getDocs(staffQuery);
 
       if (!staffSnapshot.empty) {
         const staffDoc = staffSnapshot.docs[0];
         const staffData = staffDoc.data() as Staff;
-        // Ya no verificamos contraseña aquí, Firebase Auth ya lo hizo
+        // Login exitoso como Staff
         onLogin(staffData.role, { ...staffData, id: staffDoc.id });
         return;
       }
 
-      // B) Buscar en CLIENTES
+      // B) Si no es staff, buscar en colección CLIENTES
       const clientQuery = query(collection(db, 'clients'), where('email', '==', firebaseUser.email));
       const clientSnapshot = await getDocs(clientQuery);
 
       if (!clientSnapshot.empty) {
         const clientDoc = clientSnapshot.docs[0];
         const clientData = clientDoc.data() as Client;
+        // Login exitoso como Cliente
         onLogin('client', { ...clientData, id: clientDoc.id });
         return;
       }
 
-      // Si el login de Firebase fue exitoso pero no existe documento en Firestore
-      setError('Usuario autenticado pero sin perfil asignado en el sistema.');
-      await auth.signOut(); // Cerramos la sesión técnica
+      // C) Si se autenticó pero no está en la base de datos
+      setError('Usuario válido, pero no tiene un perfil asignado en el sistema.');
+      await auth.signOut(); // Cerramos la sesión de Auth para no dejarlo en el limbo
 
     } catch (err: any) {
       console.error(err);
@@ -95,7 +105,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError('Email o contraseña incorrectos.');
       } else if (err.code === 'auth/too-many-requests') {
-        setError('Muchos intentos fallidos. Intente más tarde.');
+        setError('Demasiados intentos fallidos. Por favor intente más tarde.');
       } else {
         setError('Error al iniciar sesión. Verifique su conexión.');
       }
@@ -107,7 +117,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative">
       
-      {/* BOTÓN DE INSTALACIÓN (PWA) */}
+      {/* BOTÓN DE INSTALACIÓN (Solo si no está instalada ya) */}
       {!isStandalone && (deferredPrompt || isIOS) && (
         <div className="absolute top-4 right-4 animate-in fade-in slide-in-from-top-4">
           <button 
@@ -205,7 +215,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
       </div>
       
-      <p className="text-slate-500 text-xs mt-8">Powered by Firebase Auth</p>
+      <p className="text-slate-500 text-xs mt-8">Versión 2.1 - Autenticación Segura</p>
     </div>
   );
 };
