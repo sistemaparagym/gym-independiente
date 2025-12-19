@@ -19,9 +19,9 @@ import { WODBuilder } from './components/WODBuilder';
 import { Whiteboard } from './components/Whiteboard';
 import { NotificationsConfig } from './components/NotificationsConfig'; 
 
-// --- NUEVOS IMPORTS PARA EL KILL SWITCH ---
-import { PROJECT_STATUS } from './config';
+// --- KILL SWITCH (SISTEMA DE LICENCIA) ---
 import { SuspendedView } from './components/SuspendedView';
+import { useLicense } from './hooks/useLicense'; 
 // ------------------------------------------
 
 // Tipos
@@ -34,12 +34,8 @@ import { collection, setDoc, doc, onSnapshot, query, orderBy, deleteDoc, updateD
 type View = 'dashboard' | 'clients' | 'accounting' | 'access' | 'inventory' | 'notifications' | 'gamification' | 'workouts' | 'marketing' | 'settings' | 'bookings' | 'wod_planning' | 'whiteboard' | 'notifications_config';
 
 function App() {
-  // 1. --- VERIFICACIÓN DE LICENCIA (KILL SWITCH) ---
-  // Si isActive es false en config.ts, se muestra la pantalla de bloqueo y no carga nada más.
-  if (!PROJECT_STATUS.isActive) {
-    return <SuspendedView />;
-  }
-  // -------------------------------------------------
+  // 1. --- VERIFICACIÓN DE LICENCIA AUTOMÁTICA ---
+  const { isLocked, loading: licenseLoading } = useLicense();
 
   // ESTADO DE SESIÓN
   const [userRole, setUserRole] = useState<UserRole | null>(null);
@@ -69,6 +65,22 @@ function App() {
     membershipPrices: { basic: 0, intermediate: 0, full: 0, crossfit: 0 },
     rewards: []
   });
+
+  // --- LÓGICA DE BLOQUEO ---
+  // A) Mientras carga la licencia, mostramos un spinner para evitar parpadeos
+  if (licenseLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+      </div>
+    );
+  }
+
+  // B) Si la licencia está bloqueada, mostramos la pantalla roja y detenemos todo lo demás
+  if (isLocked) {
+    return <SuspendedView />;
+  }
+  // -------------------------
 
   // --- Sincronización Firebase ---
   useEffect(() => {
