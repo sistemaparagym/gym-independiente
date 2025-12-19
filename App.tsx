@@ -34,7 +34,7 @@ import { collection, setDoc, doc, onSnapshot, query, orderBy, deleteDoc, updateD
 type View = 'dashboard' | 'clients' | 'accounting' | 'access' | 'inventory' | 'notifications' | 'gamification' | 'workouts' | 'marketing' | 'settings' | 'bookings' | 'wod_planning' | 'whiteboard' | 'notifications_config';
 
 function App() {
-  // 1. --- VERIFICACIÓN DE LICENCIA AUTOMÁTICA ---
+  // 1. HOOKS PRIMERO (Siempre al inicio)
   const { isLocked, loading: licenseLoading } = useLicense();
 
   // ESTADO DE SESIÓN
@@ -66,23 +66,8 @@ function App() {
     rewards: []
   });
 
-  // --- LÓGICA DE BLOQUEO ---
-  // A) Mientras carga la licencia, mostramos un spinner para evitar parpadeos
-  if (licenseLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
-      </div>
-    );
-  }
-
-  // B) Si la licencia está bloqueada, mostramos la pantalla roja y detenemos todo lo demás
-  if (isLocked) {
-    return <SuspendedView />;
-  }
-  // -------------------------
-
-  // --- Sincronización Firebase ---
+  // --- Sincronización Firebase (HOOKS) ---
+  // IMPORTANTE: Los useEffect deben ir ANTES de cualquier return condicional
   useEffect(() => {
     if (!userRole) return;
 
@@ -127,18 +112,7 @@ function App() {
     };
   }, [userRole]);
 
-  const getPlanPrice = (planCode: string) => {
-    const prices: any = gymSettings.membershipPrices || { basic: 0, intermediate: 0, full: 0, crossfit: 0 };
-    return prices[planCode] || 0;
-  };
-
-  const getCurrentUserSignature = () => {
-    if (!currentUser) return 'Sistema';
-    const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'instructor' ? 'Instructor' : 'Cliente';
-    return `${currentUser.name} (${roleLabel})`;
-  };
-
-  // --- PROCESO DE COBRO AUTOMÁTICO ---
+  // --- PROCESO DE COBRO AUTOMÁTICO (HOOK) ---
   useEffect(() => {
     if (clients.length === 0) return;
 
@@ -198,18 +172,26 @@ function App() {
   }, [clients, gymSettings.membershipPrices]); 
 
 
-  // --- Funciones de Acción ---
+  // --- Helper Functions (No son Hooks, pueden ir aquí) ---
+  const getPlanPrice = (planCode: string) => {
+    const prices: any = gymSettings.membershipPrices || { basic: 0, intermediate: 0, full: 0, crossfit: 0 };
+    return prices[planCode] || 0;
+  };
+
+  const getCurrentUserSignature = () => {
+    if (!currentUser) return 'Sistema';
+    const roleLabel = userRole === 'admin' ? 'Admin' : userRole === 'instructor' ? 'Instructor' : 'Cliente';
+    return `${currentUser.name} (${roleLabel})`;
+  };
+
   const addClient = async (c: Client) => {
     const planPrice = getPlanPrice(c.plan);
-    const amountPaid = c.balance || 0; // Lo que el usuario pagó HOY al inscribirse
-    
-    // El balance inicial es (Lo que pagó) - (Costo del Plan)
+    const amountPaid = c.balance || 0; 
     const finalBalance = amountPaid - planPrice; 
     
     const clientWithPayment = { ...c, balance: finalBalance, lastMembershipPayment: c.joinDate };
     await setDoc(doc(db, 'clients', c.id), clientWithPayment);
     
-    // Solo registramos transacción si hubo un pago real de dinero
     if (amountPaid > 0) {
         await setDoc(doc(db, 'transactions', crypto.randomUUID()), { 
             id: crypto.randomUUID(), 
@@ -247,13 +229,11 @@ function App() {
   const deleteStaff = async (id: string) => { if(window.confirm('¿Borrar usuario?')) await deleteDoc(doc(db, 'staff', id)); };
   const updateStaffPassword = async (id: string, pass: string) => await updateDoc(doc(db, 'staff', id), { password: pass });
 
-  // --- NUEVAS ACCIONES CROSSFIT ---
   const addSession = async (s: ClassSession) => await setDoc(doc(db, 'classes', s.id), s);
   const deleteSession = async (id: string) => { if(window.confirm('¿Borrar turno?')) await deleteDoc(doc(db, 'classes', id)); };
   const addWod = async (w: WOD) => await setDoc(doc(db, 'wods', w.id), w);
   const deleteWod = async (id: string) => { if(window.confirm('¿Borrar WOD?')) await deleteDoc(doc(db, 'wods', id)); };
 
-  // Funciones para el Portal de Cliente
   const handleBookClass = async (classId: string) => {
       if (!currentUser || userRole !== 'client') return;
       const session = classSessions.find(s => s.id === classId);
@@ -317,8 +297,39 @@ function App() {
       return false; 
   };
 
-  if (!userRole) return <Login onLogin={(role, data) => { setUserRole(role); if (data) setCurrentUser(data); }} />;
+  const NavItem = ({ view, label, icon: Icon, badge, requiredPlan }: { view: View, label: string, icon: any, badge?: number, requiredPlan?: 'basic' | 'standard' | 'full' | 'crossfit' }) => {
+    if (!hasAccess(view)) return null; 
+    if (requiredPlan && !hasFeature(requiredPlan)) return null;
+    return (
+      <button onClick={() => { setCurrentView(view); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-medium relative ${currentView === view ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}>
+        <Icon size={18} /> <span className="text-sm">{label}</span>
+        {badge !== undefined && badge > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>}
+      </button>
+    );
+  };
+
+  // --- RENDERIZADO CONDICIONAL ---
   
+  // 1. Cargando Licencia
+  if (licenseLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+      </div>
+    );
+  }
+
+  // 2. Licencia Bloqueada
+  if (isLocked) {
+    return <SuspendedView />;
+  }
+
+  // 3. Login
+  if (!userRole) {
+    return <Login onLogin={(role, data) => { setUserRole(role); if (data) setCurrentUser(data); }} />;
+  }
+  
+  // 4. Portal Cliente
   if (userRole === 'client' && currentUser) return (
       <ClientPortal 
           client={currentUser as Client} 
@@ -335,18 +346,8 @@ function App() {
       />
   );
 
+  // 5. Panel Administrativo/Instructor
   const debtorsCount = clients.filter(c => c.balance < 0).length;
-  
-  const NavItem = ({ view, label, icon: Icon, badge, requiredPlan }: { view: View, label: string, icon: any, badge?: number, requiredPlan?: 'basic' | 'standard' | 'full' | 'crossfit' }) => {
-    if (!hasAccess(view)) return null; 
-    if (requiredPlan && !hasFeature(requiredPlan)) return null;
-    return (
-      <button onClick={() => { setCurrentView(view); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-medium relative ${currentView === view ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}>
-        <Icon size={18} /> <span className="text-sm">{label}</span>
-        {badge !== undefined && badge > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>}
-      </button>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
