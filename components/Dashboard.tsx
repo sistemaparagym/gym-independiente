@@ -3,10 +3,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Transaction, TransactionType, Client, MembershipStatus, CheckIn, GymSettings, UserRole } from '../types';
 import { Users, DollarSign, TrendingUp, TrendingDown, Activity, AlertCircle, Cake, Clock } from 'lucide-react';
 
-// IMPORTACIONES PARA MIGRACIÓN (TEMPORAL)
-import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { db, registerUser } from '../firebase'; 
-
 interface DashboardProps {
   transactions: Transaction[];
   clients: Client[];
@@ -20,48 +16,6 @@ const COLORS = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b'];
 export const Dashboard: React.FC<DashboardProps> = ({ transactions, clients, checkIns, settings, userRole }) => {
   
   const isAdmin = userRole === 'admin';
-
-  // --- FUNCIÓN DE MIGRACIÓN (USAR UNA SOLA VEZ) ---
-  const handleMigration = async () => {
-    if (!confirm("¿Estás seguro de migrar los usuarios antiguos al nuevo sistema de Login?")) return;
-    
-    try {
-      const clientsRef = collection(db, 'clients');
-      const snapshot = await getDocs(clientsRef);
-      let count = 0;
-  
-      for (const clientDoc of snapshot.docs) {
-        const clientData = clientDoc.data() as Client;
-        const tempPass = clientData.password || "Gym12345"; 
-        
-        try {
-          console.log(`Migrando ${clientData.name}...`);
-          const newUid = await registerUser(clientData.email, tempPass);
-          
-          await setDoc(doc(db, 'clients', newUid), {
-            ...clientData,
-            id: newUid, 
-            password: tempPass 
-          });
-          
-          await deleteDoc(doc(db, 'clients', clientDoc.id));
-          count++;
-          
-        } catch (err: any) {
-          if (err.code === 'auth/email-already-in-use') {
-             console.log(`El cliente ${clientData.name} ya tenía usuario, saltando...`);
-          } else {
-             console.error(`Error con ${clientData.name}:`, err);
-          }
-        }
-      }
-      alert(`Migración completada. ${count} clientes actualizados.`);
-    } catch (error) {
-      console.error("Error general en migración:", error);
-      alert("Hubo un error, revisa la consola.");
-    }
-  };
-  // ------------------------------------------------
 
   // --- CÁLCULOS FINANCIEROS (Solo Admin) ---
   const totalIncome = transactions
@@ -122,13 +76,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, clients, che
   return (
     <div className="space-y-6 p-4 sm:p-6">
       
-      {/* BOTÓN TEMPORAL DE MIGRACIÓN */}
-      {isAdmin && (
-        <button onClick={handleMigration} className="bg-purple-600 text-white p-4 rounded-xl font-bold w-full mb-6 shadow-lg animate-pulse hover:bg-purple-700 transition-colors">
-            ⚠️ EJECUTAR MIGRACIÓN DE DATOS (Login) ⚠️
-        </button>
-      )}
-
       {/* Header */}
       <div className="mb-2 flex justify-between items-end">
         <div>
@@ -253,6 +200,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, clients, che
             </ResponsiveContainer>
             </div>
         ) : (
+            /* Panel de Instructor (Reemplaza al gráfico financiero) */
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80 overflow-y-auto">
                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Alumnos Ausentes (+7 días)</h3>
                 {riskClients.length > 0 ? (
