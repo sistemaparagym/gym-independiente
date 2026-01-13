@@ -28,7 +28,7 @@ import { useLicense } from './hooks/useLicense';
 import { Client, Transaction, Product, CheckIn, GymSettings, MembershipStatus, TransactionType, Routine, UserRole, Staff, CompletedRoutine, ClassSession, WOD, WODScore } from './types';
 
 // Firebase
-import { db } from './firebase';
+import { db, registerUser } from './firebase'; // <--- IMPORTANTE: Importamos registerUser
 import { collection, setDoc, doc, onSnapshot, query, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
 
 type View = 'dashboard' | 'clients' | 'accounting' | 'access' | 'inventory' | 'notifications' | 'gamification' | 'workouts' | 'marketing' | 'settings' | 'bookings' | 'wod_planning' | 'whiteboard' | 'notifications_config';
@@ -67,7 +67,6 @@ function App() {
   });
 
   // --- Sincronización Firebase (HOOKS) ---
-  // IMPORTANTE: Los useEffect deben ir ANTES de cualquier return condicional
   useEffect(() => {
     if (!userRole) return;
 
@@ -117,7 +116,6 @@ function App() {
     if (clients.length === 0) return;
 
     const checkMemberships = async () => {
-      // Usamos fecha local exacta para evitar problemas de zona horaria
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
@@ -127,12 +125,11 @@ function App() {
         const lastPaymentStr = client.lastMembershipPayment || client.joinDate;
         
         const [y, m, d] = lastPaymentStr.split('-').map(Number);
-        const lastPaymentDate = new Date(y, m - 1, d); // Mes es index 0 en JS
+        const lastPaymentDate = new Date(y, m - 1, d); 
         
         const nextPaymentDate = new Date(lastPaymentDate);
         nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
 
-        // Si hoy es igual o mayor a la fecha de próximo pago
         if (today >= nextPaymentDate) {
           const amount = getPlanPrice(client.plan);
 
@@ -166,13 +163,11 @@ function App() {
 
     const timer = setInterval(() => {
       checkMemberships();
-    }, 10000); // Revisa cada 10 segundos
+    }, 10000); 
 
     return () => clearInterval(timer);
   }, [clients, gymSettings.membershipPrices]); 
 
-
-  // --- Helper Functions (No son Hooks, pueden ir aquí) ---
   const getPlanPrice = (planCode: string) => {
     const prices: any = gymSettings.membershipPrices || { basic: 0, intermediate: 0, full: 0, crossfit: 0 };
     return prices[planCode] || 0;
@@ -184,26 +179,43 @@ function App() {
     return `${currentUser.name} (${roleLabel})`;
   };
 
+  // --- MODIFICADO: Add Client con Registro Real ---
   const addClient = async (c: Client) => {
-    const planPrice = getPlanPrice(c.plan);
-    const amountPaid = c.balance || 0; 
-    const finalBalance = amountPaid - planPrice; 
-    
-    const clientWithPayment = { ...c, balance: finalBalance, lastMembershipPayment: c.joinDate };
-    await setDoc(doc(db, 'clients', c.id), clientWithPayment);
-    
-    if (amountPaid > 0) {
-        await setDoc(doc(db, 'transactions', crypto.randomUUID()), { 
-            id: crypto.randomUUID(), 
-            clientId: c.id, 
-            clientName: c.name,
-            description: `Pago Inicial - Alta`, 
-            amount: amountPaid, 
-            date: new Date().toISOString().split('T')[0],
-            type: TransactionType.INCOME, 
-            category: 'Cuota',
-            createdBy: getCurrentUserSignature()
-        });
+    try {
+      const tempPassword = c.password || "GymFlow123"; 
+      const uid = await registerUser(c.email, tempPassword);
+      
+      const planPrice = getPlanPrice(c.plan);
+      const amountPaid = c.balance || 0; 
+      const finalBalance = amountPaid - planPrice; 
+      
+      const clientWithPayment = { 
+        ...c, 
+        id: uid, // Usamos el UID de Firebase Auth
+        balance: finalBalance, 
+        lastMembershipPayment: c.joinDate,
+        password: tempPassword 
+      };
+
+      await setDoc(doc(db, 'clients', uid), clientWithPayment);
+      
+      if (amountPaid > 0) {
+          await setDoc(doc(db, 'transactions', crypto.randomUUID()), { 
+              id: crypto.randomUUID(), 
+              clientId: uid, 
+              clientName: c.name,
+              description: `Pago Inicial - Alta`, 
+              amount: amountPaid, 
+              date: new Date().toISOString().split('T')[0],
+              type: TransactionType.INCOME, 
+              category: 'Cuota',
+              createdBy: getCurrentUserSignature()
+          });
+      }
+      alert(`Cliente creado. Credenciales: ${c.email} / ${tempPassword}`);
+    } catch (error: any) {
+      console.error(error);
+      alert("Error creando usuario: " + error.message);
     }
   };
 
@@ -225,7 +237,20 @@ function App() {
   const updateRoutine = async (id: string, d: Partial<Routine>) => await updateDoc(doc(db, 'routines', id), d);
   const deleteRoutine = async (id: string) => { if(window.confirm('¿Seguro?')) await deleteDoc(doc(db, 'routines', id)); };
   const handleUpdateSettings = async (s: GymSettings) => { await setDoc(doc(db, 'settings', 'config'), s); setGymSettings(s); };
-  const addStaff = async (s: Staff) => await setDoc(doc(db, 'staff', s.id), s);
+  
+  // --- MODIFICADO: Add Staff con Registro Real ---
+  const addStaff = async (s: Staff) => {
+    try {
+        if (!s.password) throw new Error("La contraseña es obligatoria para el Staff");
+        const uid = await registerUser(s.email, s.password);
+        await setDoc(doc(db, 'staff', uid), { ...s, id: uid });
+        alert("Staff creado exitosamente.");
+    } catch (error: any) {
+        console.error(error);
+        alert("Error al crear staff: " + error.message);
+    }
+  };
+
   const deleteStaff = async (id: string) => { if(window.confirm('¿Borrar usuario?')) await deleteDoc(doc(db, 'staff', id)); };
   const updateStaffPassword = async (id: string, pass: string) => await updateDoc(doc(db, 'staff', id), { password: pass });
 
@@ -308,9 +333,6 @@ function App() {
     );
   };
 
-  // --- RENDERIZADO CONDICIONAL ---
-  
-  // 1. Cargando Licencia
   if (licenseLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -319,17 +341,14 @@ function App() {
     );
   }
 
-  // 2. Licencia Bloqueada
   if (isLocked) {
     return <SuspendedView />;
   }
 
-  // 3. Login
   if (!userRole) {
     return <Login onLogin={(role, data) => { setUserRole(role); if (data) setCurrentUser(data); }} />;
   }
   
-  // 4. Portal Cliente
   if (userRole === 'client' && currentUser) return (
       <ClientPortal 
           client={currentUser as Client} 
@@ -346,7 +365,6 @@ function App() {
       />
   );
 
-  // 5. Panel Administrativo/Instructor
   const debtorsCount = clients.filter(c => c.balance < 0).length;
 
   return (
