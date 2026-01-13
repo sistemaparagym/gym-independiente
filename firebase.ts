@@ -1,7 +1,6 @@
-// firebase.ts
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth"; // <--- IMPORTAR AUTH
+import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth"; 
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,9 +11,27 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Inicializar Firebase
-const app = initializeApp(firebaseConfig);
+// Inicializar Firebase (Evita errores de doble inicialización)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
-const auth = getAuth(app); // <--- INICIALIZAR AUTH
+const auth = getAuth(app); 
 
-export { db, auth }; // <--- EXPORTAR AUTH
+// --- NUEVA FUNCIÓN PARA CREAR USUARIOS SECUNDARIOS ---
+export const registerUser = async (email: string, pass: string) => {
+  // 1. Crear una instancia secundaria temporal
+  const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    // 2. Crear el usuario en esa instancia
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+    // 3. Cerrar sesión inmediatamente para no interferir con el admin
+    await signOut(secondaryAuth);
+    return userCredential.user.uid; // Retorna el UID real
+  } catch (error) {
+    throw error;
+  }
+  // La instancia secundaria se limpia sola eventualmente
+};
+
+export { db, auth };
