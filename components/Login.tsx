@@ -3,13 +3,14 @@ import { Dumbbell, Lock, Mail, ArrowRight, Loader2, Download, Smartphone, Share,
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
-import { UserRole, Client, Staff } from '../types';
+import { UserRole, Client, Staff, GymSettings } from '../types';
 
 interface LoginProps {
   onLogin: (role: UserRole, userData?: Client | Staff) => void;
+  settings: GymSettings; // Recibimos la configuración
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,8 +34,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // 3. Capturar evento de instalación (Android/PC Chrome)
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault(); // Evita que Chrome muestre el banner nativo feo
-      setDeferredPrompt(e); // Guardamos el evento para dispararlo con nuestro botón
+      e.preventDefault(); 
+      setDeferredPrompt(e); 
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -97,7 +98,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       // C) Si se autenticó pero no está en la base de datos
       setError('Usuario válido, pero no tiene un perfil asignado en el sistema.');
-      await auth.signOut(); // Cerramos la sesión de Auth para no dejarlo en el limbo
+      await auth.signOut(); 
 
     } catch (err: any) {
       console.error(err);
@@ -160,12 +161,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       )}
 
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* CABECERA DINÁMICA: NOMBRE Y LOGO DEL GIMNASIO */}
         <div className="p-8 text-center bg-indigo-600">
-           <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-             <Dumbbell size={40} className="text-white" />
-           </div>
-           <h1 className="text-3xl font-bold text-white mb-1">GymFlow</h1>
-           <p className="text-indigo-200 text-sm">Sistema de Gestión Integral</p>
+           {settings.logoUrl ? (
+               <img 
+                 src={settings.logoUrl} 
+                 alt="Logo Club" 
+                 className="w-24 h-24 rounded-full object-cover mx-auto mb-4 border-4 border-white/20 shadow-lg bg-white"
+               />
+           ) : (
+               <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border-2 border-white/10">
+                 <Dumbbell size={40} className="text-white" />
+               </div>
+           )}
+           <h1 className="text-2xl font-bold text-white mb-1 tracking-tight">{settings.name}</h1>
+           <p className="text-indigo-200 text-sm font-medium">Panel de Acceso</p>
         </div>
 
         <div className="p-8">
@@ -215,7 +225,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
       </div>
       
-      <p className="text-slate-500 text-xs mt-8">Versión 2.3 - Producción</p>
+      {/* CRÉDITOS DEL CREADOR */}
+      <div className="mt-8 text-center space-y-1 opacity-60 hover:opacity-100 transition-opacity">
+        <p className="text-slate-400 text-xs">Versión 2.4 - Producción</p>
+        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
+            Creado por <span className="text-indigo-400">Eduardo Ricci</span>
+        </p>
+      </div>
     </div>
   );
 };
