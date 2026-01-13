@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { Client, MembershipStatus, Routine, GymSettings } from '../types';
-import { Search, Plus, MoreHorizontal, User, Mail, Phone, Edit, Trash2, DollarSign, X, Key, Dumbbell, CheckCircle, Repeat, AlertCircle, Calendar } from 'lucide-react';
+import { Client, MembershipStatus, Routine, GymSettings, Staff } from '../types';
+import { Search, Plus, MoreHorizontal, Edit, Trash2, DollarSign, X, Key, Dumbbell, CheckCircle, Repeat, AlertCircle, Filter } from 'lucide-react';
 
 interface ClientsProps {
   clients: Client[];
   routines: Routine[]; 
+  staffList: Staff[]; // NUEVO: Recibe lista de staff para asignar
   addClient: (client: Client) => void;
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => void;
   registerPayment: (client: Client, amount: number, description: string) => void;
-  settings: GymSettings; // Added settings prop here to fix the type error
+  settings: GymSettings; 
 }
 
-export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, updateClient, deleteClient, registerPayment, settings }) => {
+export const Clients: React.FC<ClientsProps> = ({ clients, routines, staffList, addClient, updateClient, deleteClient, registerPayment, settings }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCoach, setFilterCoach] = useState(''); // NUEVO: Estado para filtrar por profesor
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -31,14 +34,20 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
     balance: 0, 
     plan: 'basic',
     joinDate: new Date().toISOString().split('T')[0], // Por defecto hoy
-    birthDate: '',
+    birthDate: '', // Opcional
     phone: '',
-    emergencyContact: ''
+    emergencyContact: '',
+    assignedCoach: '' // Nuevo campo
   });
   
   const [selectedNewRoutineId, setSelectedNewRoutineId] = useState('');
 
-  const filteredClients = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase()));
+  // LÓGICA DE FILTRADO MEJORADA
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCoach = filterCoach ? c.assignedCoach === filterCoach : true;
+    return matchesSearch && matchesCoach;
+  });
 
   // Helper para obtener precio
   const getPriceForPlan = (plan: string | undefined) => {
@@ -49,8 +58,8 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    // Validación de campos obligatorios
-    if (formData.name && formData.email && formData.plan && formData.joinDate && formData.birthDate) {
+    // Validación actualizada: birthDate ya no es obligatorio
+    if (formData.name && formData.email && formData.plan && formData.joinDate) {
         addClient({ 
             ...formData, 
             id: crypto.randomUUID(),
@@ -71,10 +80,11 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
             joinDate: new Date().toISOString().split('T')[0],
             birthDate: '',
             phone: '',
-            emergencyContact: ''
+            emergencyContact: '',
+            assignedCoach: ''
         });
     } else {
-        alert("Por favor completa todos los campos obligatorios (*)");
+        alert("Por favor completa los campos obligatorios (*): Nombre, Email, Plan y Fecha Ingreso.");
     }
   };
 
@@ -98,7 +108,6 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
     }
   };
 
-  // EDITADO: Agregamos 'CrossFit' al mapeo de nombres
   const getPlanName = (planCode: string) => { 
     const names: any = { basic: 'Básica', intermediate: 'Intermedia', full: 'Full', crossfit: 'CrossFit' }; 
     return names[planCode] || planCode; 
@@ -117,19 +126,40 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
 
   return (
     <div className="p-4 sm:p-6 space-y-6 min-h-screen" onClick={() => setActiveMenuId(null)}>
-      {/* Header y Buscador */}
-      <div className="flex justify-between items-center gap-4">
-        <div className="relative flex-1 max-w-md">
+      {/* Header y Filtros */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        
+        {/* Buscador */}
+        <div className="relative flex-1 w-full md:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input type="text" placeholder="Buscar cliente..." className="w-full pl-10 p-2 border rounded-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
+
+        {/* Filtro por Profesor */}
+        <div className="relative w-full md:w-auto">
+             <div className="relative">
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <select 
+                    className="w-full md:w-64 pl-10 p-2 border rounded-lg appearance-none bg-white cursor-pointer hover:border-blue-400 transition-colors"
+                    value={filterCoach}
+                    onChange={(e) => setFilterCoach(e.target.value)}
+                >
+                    <option value="">Todos los profesores</option>
+                    {staffList.map(staff => (
+                        <option key={staff.id} value={staff.name}>{staff.name}</option>
+                    ))}
+                </select>
+             </div>
+        </div>
+
+        {/* Botón Nuevo Cliente */}
         <button 
             onClick={(e) => {
                 e.stopPropagation(); 
                 setIsModalOpen(true); 
                 setFormData({status: MembershipStatus.ACTIVE, balance:0, plan:'basic', joinDate: new Date().toISOString().split('T')[0]});
             }} 
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 items-center hover:bg-blue-700 transition-colors"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 items-center hover:bg-blue-700 transition-colors w-full md:w-auto justify-center"
         >
             <Plus size={20}/> Nuevo Cliente
         </button>
@@ -151,7 +181,11 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
             <tbody className="divide-y divide-slate-100">
                 {filteredClients.map(client => (
                     <tr key={client.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 font-medium">{client.name}</td>
+                        <td className="px-6 py-4">
+                            <div className="font-medium text-slate-900">{client.name}</div>
+                            {/* Mostrar Coach asignado si existe */}
+                            {client.assignedCoach && <div className="text-xs text-indigo-500 font-medium mt-0.5">Profe: {client.assignedCoach}</div>}
+                        </td>
                         <td className="px-6 py-4 hidden md:table-cell text-slate-500">{client.phone}<br/><span className="text-xs">{client.email}</span></td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded text-xs font-bold text-slate-600 ${client.plan === 'crossfit' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100'}`}>
@@ -177,6 +211,7 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                 ))}
             </tbody>
         </table>
+        {filteredClients.length === 0 && <div className="p-8 text-center text-slate-500 italic">No se encontraron clientes con este criterio.</div>}
       </div>
       
       {/* MODAL NUEVO CLIENTE / EDITAR */}
@@ -202,12 +237,25 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                         <input required type="email" className="w-full p-2 border border-slate-300 rounded-lg" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono (WhatsApp) *</label>
-                        <input required type="tel" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="+54..." value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono (WhatsApp)</label>
+                        <input type="tel" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="+54..." value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Fecha Nacimiento *</label>
-                        <input required type="date" className="w-full p-2 border border-slate-300 rounded-lg" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Fecha Nacimiento (Opcional)</label>
+                        <input type="date" className="w-full p-2 border border-slate-300 rounded-lg" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Profesor a Cargo</label>
+                        <select 
+                            className="w-full p-2 border border-slate-300 rounded-lg bg-white" 
+                            value={formData.assignedCoach || ''} 
+                            onChange={e => setFormData({...formData, assignedCoach: e.target.value})}
+                        >
+                            <option value="">-- Sin asignar --</option>
+                            {staffList.map(staff => (
+                                <option key={staff.id} value={staff.name}>{staff.name} ({staff.role})</option>
+                            ))}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Contacto Emergencia</label>
@@ -228,13 +276,10 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                           <option value="basic">Cuota Básica</option>
                           <option value="intermediate">Cuota Intermedia</option>
                           <option value="full">Cuota Full</option>
-                          {/* EDITADO: Nueva opción CrossFit */}
                           <option value="crossfit">Cuota CrossFit / Pase Libre</option>
                         </select>
-                        {/* VISUALIZADOR DE PRECIO */}
                         <p className="text-xs mt-1 font-bold text-slate-500">
                             Precio Actual: <span className={planPrice === 0 ? "text-red-500" : "text-emerald-600"}>${planPrice}</span>
-                            {planPrice === 0 && " (¡Atención! Configura el precio en Ajustes)"}
                         </p>
                       </div>
                       <div>
@@ -245,7 +290,6 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
                       
                       {!isEditModalOpen && (
                         <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                            {/* ETIQUETA CAMBIADA PARA CLARIDAD */}
                             <label className="block text-sm font-bold text-slate-700 mb-1">Monto Abonado Hoy (Pago Inicial)</label>
                             <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -268,7 +312,7 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
         </div>
       )}
 
-      {/* ... (Resto de modales: Routine, Payment igual que antes) ... */}
+      {/* MODAL RUTINA (Sin cambios en lógica, solo re-renderizado) */}
       {isRoutineModalOpen && selectedClient && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={e => e.stopPropagation()}>
               <div className="bg-white p-0 rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
@@ -297,6 +341,8 @@ export const Clients: React.FC<ClientsProps> = ({ clients, routines, addClient, 
               </div>
           </div>
       )}
+      
+      {/* MODAL PAGO (Sin cambios) */}
       {isPaymentModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={e => e.stopPropagation()}>
               <div className="bg-white p-6 rounded-xl w-full max-w-sm">
