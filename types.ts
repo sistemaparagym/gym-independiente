@@ -72,7 +72,8 @@ export interface Client {
   level: 'Bronze' | 'Silver' | 'Gold';
   streak: number; 
   lastVisit: string;
-  birthDate: string; 
+  birthDate?: string; // CAMBIO: Ahora es opcional
+  assignedCoach?: string; // CAMBIO: Nuevo campo para el profesor a cargo
   assignedRoutineId?: string | null;
   routineStartDate?: string | null; 
   emergencyContact?: string;
