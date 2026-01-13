@@ -429,7 +429,18 @@ function App() {
         <div className="flex-1 overflow-auto bg-slate-50/50">
           <div className="max-w-7xl mx-auto">
              {currentView === 'dashboard' && <Dashboard transactions={transactions} clients={clients} checkIns={checkIns} settings={gymSettings} userRole={userRole} />}
-             {currentView === 'clients' && <Clients clients={clients} routines={routines} addClient={addClient} updateClient={updateClient} deleteClient={deleteClient} registerPayment={registerPayment} settings={gymSettings} />}
+             {currentView === 'clients' && (
+                <Clients 
+                  clients={clients} 
+                  routines={routines} 
+                  staffList={staffList} // PASAMOS LA LISTA DE STAFF
+                  addClient={addClient} 
+                  updateClient={updateClient} 
+                  deleteClient={deleteClient} 
+                  registerPayment={registerPayment} 
+                  settings={gymSettings} 
+                />
+             )}
              {currentView === 'accounting' && <Accounting transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} clients={clients} />}
              {currentView === 'inventory' && <Inventory products={products} addProduct={addProduct} />}
              {currentView === 'access' && <AccessControl checkIns={checkIns} clients={clients} onCheckIn={handleCheckIn} onCheckOut={handleCheckOut} />}
